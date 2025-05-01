@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DOS Roster System</title>
+  <style>
+    body { background-color: black; color: #FFBF00; font-family: 'Courier New', monospace; padding: 20px; }
+    .terminal-box { border: 2px solid #FFBF00; padding: 20px; max-width: 100%; margin: auto; overflow-x: auto; }
+    h2, h3 { text-align: center; margin-top: 0; }
+    .blinking-cursor { display: inline-block; width: 10px; animation: blink 1s steps(1) infinite; }
+    @keyframes blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+    .field { margin: 10px 0; }
+    label, input, select, textarea { display: block; width: 100%; background: black; color: #FFBF00; border: none; border-bottom: 1px solid #FFBF00; font-size: 16px; }
+    input:focus, select:focus, textarea:focus { outline: none; }
+    .buttons { margin-top: 20px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+    button { background-color: black; color: #FFBF00; border: 1px solid #FFBF00; padding: 10px; font-family: 'Courier New'; cursor: pointer; }
+    button:hover { background-color: #331a00; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 16px; }
+    th, td { border: 1px solid #FFBF00; padding: 6px; text-align: left; white-space: nowrap; }
+    input[type="search"] { margin-bottom: 10px; }
+  </style>
+</head>
+<body onload="showWelcome()">
+  <div class="terminal-box">
+    <h2>[ ROSTER MANAGEMENT SYSTEM ]</h2>
+
+    <div id="welcomeScreen">
+      <h3>Welcome to the State Roster System <span class="blinking-cursor">█</span></h3>
+      <p>Use the buttons below to begin.</p>
+      <div class="field">
+        <label for="adminCode">Admin Passcode:</label>
+        <input type="password" id="adminCode" placeholder="Enter to unlock admin controls">
+        <button style="margin-top: 3mm;" onclick="unlockAdmin()">[ Unlock Admin Mode ]</button>
+      </div>
+      <div class="buttons">
+        <button onclick="toggleView('entry')">[ Enter New Roster Entry ]</button>
+        <button onclick="toggleView('view')">[ View Existing Roster ]</button>
+        <button onclick="switchToFullDatabase()">[ Full Database View ]</button>
+      </div>
+    </div>
+
+    <div id="entryForm" style="display: none;">
+      <div class="buttons">
+        <button onclick="toggleView('welcome')">[ Back to Welcome ]</button>
+        <button onclick="toggleView('view')">[ View Roster ]</button>
+      </div>
+      <form id="rosterForm">
+        <input type="hidden" id="rowIndex">
+        <div class="field"><label for="name">Name:</label><input type="text" id="name"></div>
+        <div class="field"><label for="callsign">Callsign:</label><input type="text" id="callsign"></div>
+        <div class="field"><label for="department">Department / Company:</label><input type="text" id="department"></div>
+        <div class="field"><label for="rank">Rank / Title:</label><input type="text" id="rank"></div>
+        <div class="field"><label for="status">Status:</label><select id="status"><option>Active</option><option>LOA</option><option>Inactive</option></select></div>
+        <div class="field"><label for="date">Date Joined:</label><input type="date" id="date"></div>
+        <div class="field"><label for="training">Training Completed:</label><input type="text" id="training"></div>
+        <div class="field"><label for="notes">Notes:</label><textarea id="notes"></textarea></div>
+        <button type="submit">[ Submit Entry ]</button>
+      </form>
+    </div>
+
+    <div id="rosterView" style="display: none; margin-top: 20px;">
+      <div class="buttons">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button onclick="switchDepartment('SAFR')">[ SAFR ]</button>
+          <button onclick="switchDepartment('LEO')">[ LEO ]</button>
+          <button onclick="switchDepartment('PIA')">[ PIA ]</button>
+          <button onclick="switchDepartment('DHS')">[ DHS ]</button>
+          <button onclick="switchDepartment('FIB')">[ FIB ]</button>
+          <button onclick="switchDepartment('NIA')">[ NIA ]</button>
+          <button onclick="switchToFullDatabase()">[ View ALL Departments ]</button>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-left:auto;">
+          <button onclick="printRoster()">[ Print Roster ]</button>
+          <button onclick="toggleView('entry')">[ Entry Mode ]</button>
+          <button onclick="toggleView('welcome')">[ Back to Welcome ]</button>
+        </div>
+      </div>
+      <h3>[ ROSTER VIEW – <span id="activeDept">LEO</span> ]</h3>
+      <input type="search" id="searchInput" placeholder="Search name or callsign...">
+      <table id="rosterTable">
+        <thead><tr id="tableHeaders"></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+<script>
+<script>
+</script>
+</body>
+</html>
+
+<script>
+  const ADMIN_PASSCODE = 'ADMIN123';
+  let isAdmin = false;
+  let currentDepartment = 'LEO';
+
+  const departments = ['SAFR', 'LEO', 'PIA', 'DHS', 'FIB', 'NIA'];
+  const apiBase = 'https://opensheet.elk.sh/1VSTPUNuy6-IpqwTrxc--264RAyro1YS4bH0zvJ8f7-o';
+  const scriptURL = 'https://script.google.com/macros/s/AKfycbzSylW-VO98oDJSkYZHElRynXHt7HGn7Uwm6KnRehn2Iwda5su98OMo6o7WG4yEOhYs/exec';
+
+  const departmentConfigs = {
+    SAFR: { columns: ['Name','Callsign','Department','Rank','Date','Training','Notes'], formFields: ['name','callsign','department','rank','date','training','notes'] },
+    LEO:  { columns: ['Name','Callsign','Department','Rank','Status','Date','Training','Notes'], formFields: ['name','callsign','department','rank','status','date','training','notes'] },
+    PIA:  { columns: ['Department','Discord','Rank','Notes'], formFields: ['name','department','rank','notes'] },
+    DHS:  { columns: ['Department','Discord','Rank','Notes'], formFields: ['name','department','rank','notes'] },
+    FIB:  { columns: ['Department','Discord','Rank','Notes'], formFields: ['name','department','rank','notes'] },
+    NIA:  { columns: ['Department','Discord','Rank','Notes'], formFields: ['name','department','rank','notes'] },
+    ALL:  {
+      columns: ['Name','Callsign','Department','Rank','Status','Date','Training','Notes'],
+      formFields: []
+    }
+  };
+
+  function showWelcome() {
+    toggleView('welcome');
+  }
+
+  function unlockAdmin() {
+    if (document.getElementById('adminCode').value === ADMIN_PASSCODE) {
+      isAdmin = true;
+      alert('Admin mode activated');
+      loadRoster();
+    } else alert('Incorrect passcode');
+  }
+
+  function toggleView(view) {
+    document.getElementById('welcomeScreen').style.display = view === 'welcome' ? 'block' : 'none';
+    document.getElementById('entryForm').style.display = view === 'entry' && currentDepartment !== 'ALL' ? 'block' : 'none';
+    document.getElementById('rosterView').style.display = view === 'view' ? 'block' : 'none';
+    if (view === 'view') loadRoster();
+  }
+
+  function switchDepartment(dept) {
+    currentDepartment = dept;
+    document.getElementById('activeDept').textContent = dept;
+    renderTableHeaders();
+    renderFormFields();
+    loadRoster();
+  }
+
+  function switchToFullDatabase() {
+    currentDepartment = 'ALL';
+    document.getElementById('activeDept').textContent = 'ALL';
+    renderTableHeaders();
+    renderFormFields();
+    loadRoster();
+  }
+
+  function renderTableHeaders() {
+    const headerRow = document.getElementById('tableHeaders');
+    headerRow.innerHTML = '';
+    departmentConfigs[currentDepartment].columns.forEach(col => {
+      const th = document.createElement('th');
+      th.textContent = col;
+      headerRow.appendChild(th);
+    });
+    if (isAdmin) headerRow.innerHTML += '<th>Actions</th>';
+  }
+
+  function renderFormFields() {
+    document.querySelectorAll('.field').forEach(div => {
+      const input = div.querySelector('input, select, textarea');
+      if (input) div.style.display = departmentConfigs[currentDepartment].formFields.includes(input.id) ? 'block' : 'none';
+    });
+  }
+
+  document.getElementById('rosterForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    if (currentDepartment === 'ALL') {
+      alert('Cannot submit entries in full database view.');
+      return;
+    }
+
+    const data = {
+      action: document.getElementById('rowIndex').value ? 'update' : 'add',
+      index: document.getElementById('rowIndex').value,
+      department: currentDepartment
+    };
+
+    departmentConfigs[currentDepartment].formFields.forEach(id => {
+      data[id] = document.getElementById(id).value;
+    });
+
+    const body = new URLSearchParams(data);
+    fetch(scriptURL, { method: 'POST', mode: 'no-cors', body }).then(() => {
+      alert('Submitted successfully!');
+      document.getElementById('rosterForm').reset();
+      toggleView('view');
+    });
+  });
+
+  async function loadRoster() {
+    const url = currentDepartment === 'ALL'
+      ? Promise.all(
+          departments.map(d =>
+            fetch(`${apiBase}/${d}`).then(r =>
+              r.json().then(data => ({ dept: d, data }))
+            )
+          )
+        )
+      : fetch(`${apiBase}/${currentDepartment}`).then(res =>
+          res.json().then(data => ({ dept: currentDepartment, data }))
+        );
+
+    const tbody = document.querySelector('#rosterTable tbody');
+    tbody.innerHTML = '';
+    const results = await url;
+    const entries = Array.isArray(results) ? results : [results];
+
+    entries.forEach(({ dept, data }) => {
+      data.forEach((row, i) => {
+        const tr = document.createElement('tr');
+        departmentConfigs[currentDepartment === 'ALL' ? dept : currentDepartment].columns.forEach(col => {
+          const td = document.createElement('td');
+          td.textContent = row[col] || '';
+          tr.appendChild(td);
+        });
+        if (isAdmin) {
+          const td = document.createElement('td');
+          td.innerHTML = `
+            <button onclick='editEntry(${i}, ${JSON.stringify(row).replace(/"/g, "&quot;")})'>✏️</button>
+            <button onclick='deleteEntry(${i})'>🗑️</button>
+          `;
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      });
+    });
+  }
+
+  function editEntry(index, row) {
+    if (currentDepartment === 'ALL') {
+      alert('Cannot edit entries in full database view.');
+      return;
+    }
+    document.getElementById('rowIndex').value = index;
+    renderFormFields();
+    departmentConfigs[currentDepartment].formFields.forEach(field => {
+      const el = document.getElementById(field);
+      if (el) el.value = row[field] || row[field.charAt(0).toUpperCase() + field.slice(1)] || '';
+    });
+    toggleView('entry');
+  }
+
+  function deleteEntry(index) {
+    if (currentDepartment === 'ALL') {
+      alert('Cannot delete entries in full database view.');
+      return;
+    }
+    if (!confirm('Are you sure?')) return;
+    fetch(scriptURL, {
+      method: 'POST',
+      mode: 'no-cors',
+      body: new URLSearchParams({ action: 'delete', index, department: currentDepartment })
+    }).then(() => {
+      alert('Deleted!');
+      loadRoster();
+    });
+  }
+
+  document.getElementById('searchInput').addEventListener('input', function () {
+    const filter = this.value.toLowerCase();
+    const rows = document.querySelectorAll('#rosterTable tbody tr');
+    rows.forEach(row => {
+      const text = row.textContent.toLowerCase();
+      row.style.display = text.includes(filter) ? '' : 'none';
+    });
+  });
+
+  function printRoster() {
+    window.print();
+  }
+</script>
+</body>
+</html>
